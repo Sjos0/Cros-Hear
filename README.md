@@ -51,6 +51,8 @@ O projeto usa Kotlin, Jetpack Compose e Gradle. Para compilar localmente, instal
 
 O APK de depuração é gerado em `app/build/outputs/apk/debug/`. Para criar uma build de release assinada, configure seu próprio keystore e as variáveis `KEYSTORE_PATH`, `STORE_PASSWORD` e `KEY_PASSWORD`; as credenciais de assinatura não são incluídas neste repositório.
 
+**Limitação conhecida:** esses comandos não foram executados nesta publicação. Uma tentativa anterior de compilação do código-fonte falhou por conflito de recursos dos ícones do launcher; a compilação reproduzível ainda precisa ser corrigida e validada separadamente. A release v1.0.0 usa o APK existente em `apk/`, não um binário recompilado durante esta tarefa.
+
 ## Permissões e privacidade
 
 O manifesto declara permissões para sobreposição de tela, serviço em primeiro plano (incluindo o tipo especial usado pelo serviço) e notificações. O manifesto atual não declara a permissão `INTERNET`. As preferências do aplicativo são armazenadas localmente.
