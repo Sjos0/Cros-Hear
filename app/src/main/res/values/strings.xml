@@ -1,0 +1,19 @@
+<resources>
+    <string name="app_name">Dot Crosshair</string>
+    <string name="status_active">Mira Ativa</string>
+    <string name="status_inactive">Mira Desativada</string>
+    <string name="enable_crosshair">Ativar Mira</string>
+    <string name="disable_crosshair">Desativar Mira</string>
+    <string name="dot_size">Tamanho do Ponto</string>
+    <string name="dot_color">Cor do Ponto</string>
+    <string name="permission_required_title">Permissão de Sobreposição</string>
+    <string name="permission_required_desc">O Dot Crosshair precisa de autorização para sobrepor a tela para que o ponto permaneça visível em jogos e outros aplicativos.</string>
+    <string name="grant_permission">Conceder Permissão</string>
+    <string name="notification_channel_name">Serviço Dot Crosshair</string>
+    <string name="notification_channel_desc">Mantém o ponto de mira centralizado na tela sobre jogos.</string>
+    <string name="notification_title">Dot Crosshair ativo</string>
+    <string name="notification_text">Ponto centralizado na tela. Toque para abrir opções.</string>
+    <string name="notification_action_stop">Desativar</string>
+    <string name="preview_title">Visualização em Tempo Real</string>
+    <string name="preview_tip">O ponto permanece exatamente no centro matemático da tela, não bloqueia toques e não consome recursos extras.</string>
+</resources>

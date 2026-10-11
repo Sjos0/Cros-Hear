@@ -1,0 +1,6 @@
+{
+  "name": "Dot Crosshair",
+  "description": "Mira de ponto ultra leve, minimalista e precisa centralizada na tela com sobreposição para jogos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

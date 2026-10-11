@@ -1,0 +1,62 @@
+package com.example
+
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import com.example.data.CrosshairPreferences
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+
+@RunWith(RobolectricTestRunner::class)
+class ExampleUnitTest {
+
+    private lateinit var preferences: CrosshairPreferences
+
+    @Before
+    fun setUp() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        preferences = CrosshairPreferences(context)
+    }
+
+    @Test
+    fun testDefaultState() {
+        val state = preferences.state.value
+        assertFalse(state.isEnabled)
+        assertEquals(CrosshairPreferences.DEFAULT_SIZE_DP, state.dotSizeDp)
+        assertEquals(CrosshairPreferences.DEFAULT_COLOR, state.dotColorArgb)
+    }
+
+    @Test
+    fun testToggleEnabled() {
+        preferences.setEnabled(true)
+        assertTrue(preferences.state.value.isEnabled)
+
+        preferences.setEnabled(false)
+        assertFalse(preferences.state.value.isEnabled)
+    }
+
+    @Test
+    fun testSizeClamping() {
+        preferences.setSizeDp(12)
+        assertEquals(12, preferences.state.value.dotSizeDp)
+
+        // Below minimum
+        preferences.setSizeDp(0)
+        assertEquals(CrosshairPreferences.MIN_SIZE_DP, preferences.state.value.dotSizeDp)
+
+        // Above maximum
+        preferences.setSizeDp(50)
+        assertEquals(CrosshairPreferences.MAX_SIZE_DP, preferences.state.value.dotSizeDp)
+    }
+
+    @Test
+    fun testColorUpdate() {
+        val testColor = 0xFFFF1744.toInt()
+        preferences.setColor(testColor)
+        assertEquals(testColor, preferences.state.value.dotColorArgb)
+    }
+}
