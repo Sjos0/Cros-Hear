@@ -14,3 +14,7 @@
 .cxx
 local.properties
 .env
+
+# Ensure compiled APK in /apk/ is tracked in GitHub
+!/apk/
+!/apk/*.apk
