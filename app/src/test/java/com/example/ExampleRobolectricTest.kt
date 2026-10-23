@@ -22,12 +22,6 @@ class ExampleRobolectricTest {
 
         dotView.update(radiusPx = 15f, colorArgb = 0xFF00FF66.toInt())
         assertNotNull(dotView)
-
-        dotView.setOffset(20f, -30f)
-        assertNotNull(dotView)
-
-        dotView.resetOffset()
-        assertNotNull(dotView)
     }
 
     @Test
@@ -39,6 +33,7 @@ class ExampleRobolectricTest {
         prefs1.setEnabled(true)
         prefs1.setGyroEnabled(true)
         prefs1.setGyroSensitivity(2.2f)
+        prefs1.setGyroStepPx(55)
 
         val prefs2 = CrosshairPreferences(context)
         assertEquals(14, prefs2.state.value.dotSizeDp)
@@ -46,5 +41,6 @@ class ExampleRobolectricTest {
         assertTrue(prefs2.state.value.isEnabled)
         assertTrue(prefs2.state.value.isGyroEnabled)
         assertEquals(2.2f, prefs2.state.value.gyroSensitivity, 0.001f)
+        assertEquals(55, prefs2.state.value.gyroStepPx)
     }
 }

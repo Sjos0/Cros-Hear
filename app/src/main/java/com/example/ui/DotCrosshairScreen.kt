@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -52,7 +51,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
@@ -103,19 +101,21 @@ fun DotCrosshairScreen(
     state: CrosshairState,
     hasOverlayPermission: Boolean,
     isBatteryOptimizationIgnored: Boolean,
-    previewOffsetX: Float = 0f,
-    previewOffsetY: Float = 0f,
+    isAccessibilityEnabled: Boolean,
+    detectedDirectionLabel: String,
     onToggleEnabled: (Boolean) -> Unit,
     onSizeChange: (Int) -> Unit,
     onColorChange: (Int) -> Unit,
     onToggleGyro: (Boolean) -> Unit,
     onGyroSensitivityChange: (Float) -> Unit,
-    onGyroSmoothnessChange: (Float) -> Unit,
+    onGyroStepChange: (Int) -> Unit,
+    onGyroIntervalChange: (Long) -> Unit,
     onToggleInvertX: (Boolean) -> Unit,
     onToggleInvertY: (Boolean) -> Unit,
     onCalibrateGyro: () -> Unit,
     onRequestPermission: () -> Unit,
     onRequestDisableBatteryOptimization: () -> Unit,
+    onRequestAccessibility: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
@@ -128,7 +128,7 @@ fun DotCrosshairScreen(
             .padding(horizontal = 20.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Top Header with fully responsive, non-wrapping status pill
+        // Top Header - 100% responsive, no line-wrapping on status pill
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -153,7 +153,7 @@ fun DotCrosshairScreen(
                 )
             }
 
-            // Status Badge - Fixed single-line layout with softWrap = false to prevent line wraps
+            // Status Badge - Fixed single-line layout
             Surface(
                 shape = RoundedCornerShape(20.dp),
                 color = if (state.isEnabled) NeonGreen.copy(alpha = 0.15f) else DarkSurfaceVariant,
@@ -281,7 +281,7 @@ fun DotCrosshairScreen(
                         color = TextPrimary
                     )
                     Text(
-                        text = if (state.isEnabled) "Mira visível no centro sobre todos os apps" else "Ponto oculto. Toque para ativar.",
+                        text = if (state.isEnabled) "Ponto fixo no centro sobre todos os jogos e apps" else "Ponto oculto. Toque para ativar.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextSecondary
                     )
@@ -307,7 +307,7 @@ fun DotCrosshairScreen(
             }
         }
 
-        // Real-Time Center Preview Box with live Gyro feedback
+        // Real-Time Center Preview Box - Dot is ALWAYS strictly centered
         Card(
             colors = CardDefaults.cardColors(containerColor = DarkSurface),
             shape = RoundedCornerShape(16.dp),
@@ -329,41 +329,24 @@ fun DotCrosshairScreen(
                         style = MaterialTheme.typography.titleMedium,
                         color = TextPrimary
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        if (state.isGyroEnabled) {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = NeonCyan.copy(alpha = 0.15f),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.4f))
-                            ) {
-                                Text(
-                                    text = "Giroscópio Ativo",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = NeonCyan,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-                        Text(
-                            text = "${state.dotSizeDp} dp",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = NeonCyan
-                        )
-                    }
+                    Text(
+                        text = "${state.dotSizeDp} dp",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = NeonCyan
+                    )
                 }
 
-                // Visual Target Display
+                // Target box with strictly centered dot
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(140.dp)
+                        .height(130.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(Color(0xFF090D12))
                         .border(1.dp, DarkBorder, RoundedCornerShape(12.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    // Subtle concentric guide rings
+                    // Concentric crosshair rings
                     Box(
                         modifier = Modifier
                             .size(100.dp)
@@ -374,35 +357,36 @@ fun DotCrosshairScreen(
                             .size(60.dp)
                             .border(1.dp, Color(0xFF1E2836), CircleShape)
                     )
-                    // Axis cross indicators
-                    Box(
-                        modifier = Modifier
-                            .size(12.dp)
-                            .border(0.5.dp, Color(0xFF263242), CircleShape)
-                    )
 
-                    // Live Dot Render with live preview offset if gyro is active
+                    // Strictly Centered Dot (Never drifts or moves)
                     val previewColor = Color(state.dotColorArgb)
                     Box(
                         modifier = Modifier
-                            .offset {
-                                IntOffset(
-                                    x = previewOffsetX.toInt(),
-                                    y = previewOffsetY.toInt()
-                                )
-                            }
                             .size(state.dotSizeDp.dp)
                             .clip(CircleShape)
                             .background(previewColor)
                     )
                 }
 
+                // Gyroscope Live Telemetry Badge
+                if (state.isGyroEnabled) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = NeonCyan.copy(alpha = 0.12f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.35f))
+                    ) {
+                        Text(
+                            text = "Giroscópio (8 Direções): $detectedDirectionLabel",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = NeonCyan,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+
                 Text(
-                    text = if (state.isGyroEnabled) {
-                        "Incline o aparelho para testar a movimentação da mira em tempo real."
-                    } else {
-                        stringResource(R.string.preview_tip)
-                    },
+                    text = "O ponto permanece fixo exatamente no centro da tela enquanto o giroscópio faz o arraste nas 8 direções.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextMuted,
                     textAlign = TextAlign.Center
@@ -410,7 +394,7 @@ fun DotCrosshairScreen(
             }
         }
 
-        // Gyroscope Assist Section (NEW)
+        // Gyroscope Screen Dragging Section (8 Direções)
         Card(
             colors = CardDefaults.cardColors(containerColor = DarkSurface),
             shape = RoundedCornerShape(16.dp),
@@ -424,7 +408,7 @@ fun DotCrosshairScreen(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // Gyro Header and Toggle
+                // Header & Toggle
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -479,8 +463,76 @@ fun DotCrosshairScreen(
                 AnimatedVisibility(visible = state.isGyroEnabled) {
                     Column(
                         verticalArrangement = Arrangement.spacedBy(14.dp),
-                        modifier = Modifier.padding(top = 6.dp)
+                        modifier = Modifier.padding(top = 4.dp)
                     ) {
+                        // Accessibility Permission Requirement Banner
+                        if (!isAccessibilityEnabled) {
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant),
+                                shape = RoundedCornerShape(12.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, VividOrange.copy(alpha = 0.5f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.accessibility_required_title),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = VividOrange,
+                                        fontSize = 14.sp
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.accessibility_required_desc),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = TextSecondary,
+                                        fontSize = 12.sp
+                                    )
+                                    Button(
+                                        onClick = onRequestAccessibility,
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = VividOrange,
+                                            contentColor = DarkBackground
+                                        ),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.accessibility_grant_btn),
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = NeonGreen.copy(alpha = 0.12f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, NeonGreen.copy(alpha = 0.35f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = NeonGreen,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.accessibility_status_active),
+                                        color = NeonGreen,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+
                         // Sensitivity Slider
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(
@@ -506,12 +558,40 @@ fun DotCrosshairScreen(
                                     thumbColor = NeonCyan,
                                     activeTrackColor = NeonCyan,
                                     inactiveTrackColor = DarkSurfaceVariant
-                                ),
-                                modifier = Modifier.testTag("gyro_sensitivity_slider")
+                                )
                             )
                         }
 
-                        // Smoothness / Response Slider
+                        // Drag Distance (Passo em pixels)
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.gyro_step_size),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "${state.gyroStepPx} px",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = TextSecondary
+                                )
+                            }
+                            Slider(
+                                value = state.gyroStepPx.toFloat(),
+                                onValueChange = { onGyroStepChange(it.toInt()) },
+                                valueRange = 15f..120f,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = NeonCyan,
+                                    activeTrackColor = NeonCyan,
+                                    inactiveTrackColor = DarkSurfaceVariant
+                                )
+                            )
+                        }
+
+                        // Gesture Interval (Para não competir com toques manuais)
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -522,31 +602,25 @@ fun DotCrosshairScreen(
                                     style = MaterialTheme.typography.bodyLarge,
                                     color = TextPrimary
                                 )
-                                val smoothnessLabel = when {
-                                    state.gyroSmoothness >= 0.65f -> "Alta (Muito Suave)"
-                                    state.gyroSmoothness >= 0.35f -> "Equilibrada"
-                                    else -> "Direta (Máx Resposta)"
-                                }
                                 Text(
-                                    text = smoothnessLabel,
+                                    text = "${state.gyroIntervalMs} ms",
                                     style = MaterialTheme.typography.labelLarge,
                                     color = TextSecondary
                                 )
                             }
                             Slider(
-                                value = state.gyroSmoothness,
-                                onValueChange = onGyroSmoothnessChange,
-                                valueRange = 0f..0.85f,
+                                value = state.gyroIntervalMs.toFloat(),
+                                onValueChange = { onGyroIntervalChange(it.toLong()) },
+                                valueRange = 40f..160f,
                                 colors = SliderDefaults.colors(
                                     thumbColor = NeonCyan,
                                     activeTrackColor = NeonCyan,
                                     inactiveTrackColor = DarkSurfaceVariant
-                                ),
-                                modifier = Modifier.testTag("gyro_smoothness_slider")
+                                )
                             )
                         }
 
-                        // Axis Inversion Controls
+                        // 8-Direction Axes Inversion
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
@@ -613,7 +687,7 @@ fun DotCrosshairScreen(
             }
         }
 
-        // Battery Optimization & Background Execution Protection Card (NEW)
+        // Battery Optimization Card
         Card(
             colors = CardDefaults.cardColors(containerColor = DarkSurface),
             shape = RoundedCornerShape(16.dp),
@@ -833,7 +907,7 @@ fun DotCrosshairScreen(
             }
         }
 
-        // Lightweight Performance Specs
+        // Performance & Touch Guarantee
         Surface(
             color = DarkSurfaceVariant.copy(alpha = 0.5f),
             shape = RoundedCornerShape(12.dp),
@@ -844,12 +918,12 @@ fun DotCrosshairScreen(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    text = "Garantia de Desempenho",
+                    text = "Garantia de Desempenho e Toques Livres",
                     style = MaterialTheme.typography.labelLarge,
                     color = TextPrimary
                 )
                 Text(
-                    text = "• Giroscópio com sensor delay otimizado e zero alocação de GC\n• 0% consumo de CPU em repouso\n• Aceleração direta por hardware (GPU)\n• Toques totalmente livres sem interferência\n• Totalmente livre de anúncios e telemetria",
+                    text = "• Ponto estritamente centralizado na tela\n• Arraste de giroscópio nas 8 direções discretas (N, S, L, O e diagonais)\n• Intervalos controlados para não competir com seus toques manuais\n• Zero impacto de bateria quando a mira ou o giroscópio estiverem desligados",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary,
                     lineHeight = 18.sp

@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -29,6 +28,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.CrosshairPreferences
 import com.example.service.DotOverlayService
+import com.example.service.GyroAccessibilityService
 import com.example.ui.DotCrosshairScreen
 import com.example.ui.theme.DotCrosshairTheme
 
@@ -37,10 +37,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private lateinit var preferences: CrosshairPreferences
     private var hasOverlayPermission by mutableStateOf(false)
     private var isBatteryOptimizationIgnored by mutableStateOf(false)
+    private var isAccessibilityEnabled by mutableStateOf(false)
 
-    // Interactive in-app live preview gyro offsets
-    private var previewOffsetX by mutableFloatStateOf(0f)
-    private var previewOffsetY by mutableFloatStateOf(0f)
+    // Current detected direction label for live user feedback
+    private var detectedDirectionLabel by mutableStateOf("Neutro (Centro)")
 
     private var sensorManager: SensorManager? = null
     private var rotationSensor: Sensor? = null
@@ -51,7 +51,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     private val requestNotificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ ->
-            // Notification permission result handled silently
+            // Handled silently
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -78,8 +78,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         state = state,
                         hasOverlayPermission = hasOverlayPermission,
                         isBatteryOptimizationIgnored = isBatteryOptimizationIgnored,
-                        previewOffsetX = previewOffsetX,
-                        previewOffsetY = previewOffsetY,
+                        isAccessibilityEnabled = isAccessibilityEnabled,
+                        detectedDirectionLabel = detectedDirectionLabel,
                         onToggleEnabled = { enabled ->
                             if (enabled && !hasOverlayPermission) {
                                 requestOverlayPermission()
@@ -117,8 +117,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                                 DotOverlayService.update(this@MainActivity)
                             }
                         },
-                        onGyroSmoothnessChange = { smoothness ->
-                            preferences.setGyroSmoothness(smoothness)
+                        onGyroStepChange = { stepPx ->
+                            preferences.setGyroStepPx(stepPx)
+                            if (state.isEnabled) {
+                                DotOverlayService.update(this@MainActivity)
+                            }
+                        },
+                        onGyroIntervalChange = { intervalMs ->
+                            preferences.setGyroIntervalMs(intervalMs)
                             if (state.isEnabled) {
                                 DotOverlayService.update(this@MainActivity)
                             }
@@ -137,8 +143,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         },
                         onCalibrateGyro = {
                             preferences.calibrateNeutral(currentLastPitch, currentLastRoll)
-                            previewOffsetX = 0f
-                            previewOffsetY = 0f
+                            detectedDirectionLabel = "Neutro (Calibrado)"
                             if (state.isEnabled) {
                                 DotOverlayService.calibrate(this@MainActivity)
                             }
@@ -148,6 +153,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         },
                         onRequestDisableBatteryOptimization = {
                             requestDisableBatteryOptimization()
+                        },
+                        onRequestAccessibility = {
+                            openAccessibilitySettings()
                         },
                         modifier = Modifier.padding(innerPadding)
                     )
@@ -178,8 +186,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             sm.registerListener(this, sensor, SensorManager.SENSOR_DELAY_UI)
         } else {
             sm?.unregisterListener(this)
-            previewOffsetX = 0f
-            previewOffsetY = 0f
+            detectedDirectionLabel = "Neutro (Centro)"
         }
     }
 
@@ -187,6 +194,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (event == null) return
         val state = preferences.state.value
         if (!state.isGyroEnabled) return
+
+        var deltaRoll = 0f
+        var deltaPitch = 0f
 
         when (event.sensor.type) {
             Sensor.TYPE_GAME_ROTATION_VECTOR,
@@ -198,33 +208,44 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 currentLastPitch = pitch
                 currentLastRoll = roll
 
-                var deltaRoll = roll - state.neutralRoll
-                var deltaPitch = pitch - state.neutralPitch
-
-                val deadzone = 0.015f
-                if (kotlin.math.abs(deltaRoll) < deadzone) deltaRoll = 0f
-                if (kotlin.math.abs(deltaPitch) < deadzone) deltaPitch = 0f
-
-                val scale = 80f * state.gyroSensitivity
-                val targetX = deltaRoll * scale * (if (state.gyroInvertX) -1f else 1f)
-                val targetY = deltaPitch * scale * (if (state.gyroInvertY) -1f else 1f)
-
-                val alpha = (1f - state.gyroSmoothness).coerceIn(0.1f, 1f)
-                previewOffsetX += (targetX.coerceIn(-50f, 50f) - previewOffsetX) * alpha
-                previewOffsetY += (targetY.coerceIn(-40f, 40f) - previewOffsetY) * alpha
+                deltaRoll = roll - state.neutralRoll
+                deltaPitch = pitch - state.neutralPitch
             }
             Sensor.TYPE_ACCELEROMETER -> {
                 val accelX = -event.values[0] / 9.81f
                 val accelY = event.values[1] / 9.81f
+                currentLastPitch = accelY
+                currentLastRoll = accelX
 
-                val scale = 50f * state.gyroSensitivity
-                val targetX = (accelX - state.neutralRoll) * scale * (if (state.gyroInvertX) -1f else 1f)
-                val targetY = (accelY - state.neutralPitch) * scale * (if (state.gyroInvertY) -1f else 1f)
-
-                val alpha = (1f - state.gyroSmoothness).coerceIn(0.1f, 1f)
-                previewOffsetX += (targetX.coerceIn(-50f, 50f) - previewOffsetX) * alpha
-                previewOffsetY += (targetY.coerceIn(-40f, 40f) - previewOffsetY) * alpha
+                deltaRoll = accelX - state.neutralRoll
+                deltaPitch = accelY - state.neutralPitch
             }
+        }
+
+        val dirX = if (state.gyroInvertX) -deltaRoll else deltaRoll
+        val dirY = if (state.gyroInvertY) -deltaPitch else deltaPitch
+
+        val magnitude = kotlin.math.hypot(dirX.toDouble(), dirY.toDouble()).toFloat()
+
+        if (magnitude < 0.035f) {
+            detectedDirectionLabel = "Neutro (Centro)"
+            return
+        }
+
+        val angle = kotlin.math.atan2(dirY.toDouble(), dirX.toDouble())
+        val normalizedAngle = if (angle < 0) angle + (2.0 * Math.PI) else angle
+        val sector = (((normalizedAngle + (Math.PI / 8.0)) / (Math.PI / 4.0)).toInt()) % 8
+
+        detectedDirectionLabel = when (sector) {
+            0 -> "Leste (Direita →)"
+            1 -> "Sudeste (Direita + Baixo ↘)"
+            2 -> "Sul (Baixo ↓)"
+            3 -> "Sudoeste (Esquerda + Baixo ↙)"
+            4 -> "Oeste (Esquerda ←)"
+            5 -> "Noroeste (Esquerda + Cima ↖)"
+            6 -> "Norte (Cima ↑)"
+            7 -> "Nordeste (Direita + Cima ↗)"
+            else -> "Neutro (Centro)"
         }
     }
 
@@ -236,6 +257,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         hasOverlayPermission = Settings.canDrawOverlays(this)
         val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
         isBatteryOptimizationIgnored = powerManager?.isIgnoringBatteryOptimizations(packageName) == true
+        isAccessibilityEnabled = GyroAccessibilityService.isRunning()
     }
 
     private fun requestOverlayPermission() {
@@ -259,8 +281,17 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 val fallbackIntent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
                 startActivity(fallbackIntent)
             } catch (_: Exception) {
-                // If device manufacturer removed the intent, gracefully ignore
+                // Ignore gracefully
             }
+        }
+    }
+
+    private fun openAccessibilitySettings() {
+        try {
+            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            startActivity(intent)
+        } catch (_: Exception) {
+            // Ignore gracefully
         }
     }
 

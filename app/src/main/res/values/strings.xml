@@ -17,17 +17,25 @@
     <string name="preview_title">Visualização em Tempo Real</string>
     <string name="preview_tip">O ponto permanece exatamente no centro matemático da tela, não bloqueia toques e não consome recursos extras.</string>
 
-    <!-- Gyroscope Strings -->
-    <string name="gyro_section_title">Assistência por Giroscópio</string>
-    <string name="gyro_section_subtitle">Desloca o ponto ao inclinar o celular para auxiliar na mira em jogos de navegador e FPS</string>
-    <string name="gyro_enable_title">Giroscópio Dinâmico</string>
-    <string name="gyro_enable_desc">Mira reage aos movimentos físicos de inclinação</string>
-    <string name="gyro_sensitivity">Sensibilidade</string>
-    <string name="gyro_smoothness">Suavização / Resposta</string>
+    <!-- Gyroscope & Drag Strings -->
+    <string name="gyro_section_title">Giroscópio (Arraste na Tela)</string>
+    <string name="gyro_section_subtitle">Simula o clique e arraste para mover a visão do jogo nas 8 direções (N, S, L, O e diagonais) mantendo a mira 100% centralizada.</string>
+    <string name="gyro_enable_title">Arraste por Giroscópio</string>
+    <string name="gyro_enable_desc">Inclinações movem a visão sem competir com o seu toque</string>
+    <string name="gyro_sensitivity">Sensibilidade do Arraste</string>
+    <string name="gyro_step_size">Distância do Arraste</string>
+    <string name="gyro_smoothness">Intervalo entre Gestos</string>
     <string name="gyro_invert_x">Inverter Horizontal (X)</string>
     <string name="gyro_invert_y">Inverter Vertical (Y)</string>
     <string name="gyro_calibrate_btn">Calibrar Posição Neutra (Zero)</string>
-    <string name="gyro_calibrated_msg">Posição calibrada com sucesso!</string>
+    <string name="gyro_direction_current">Direção detectada:</string>
+
+    <!-- Accessibility Service Strings -->
+    <string name="accessibility_service_desc">Permite que o giroscópio do Dot Crosshair clique e arraste na tela nas 8 direções para mover a câmera em jogos de navegador sem interferir com os seus toques manuais.</string>
+    <string name="accessibility_required_title">Acessibilidade Necessária para Arraste</string>
+    <string name="accessibility_required_desc">Para simular o clique e arraste na tela ao inclinar o celular em jogos de navegador, ative o serviço de Acessibilidade do Dot Crosshair no sistema.</string>
+    <string name="accessibility_grant_btn">Ativar Acessibilidade</string>
+    <string name="accessibility_status_active">Acessibilidade Ativa (Gestos Permitidos)</string>
 
     <!-- Battery & Background Protection -->
     <string name="battery_section_title">Execução em Segundo Plano</string>

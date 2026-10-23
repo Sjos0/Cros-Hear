@@ -8,7 +8,7 @@ import android.view.View
 /**
  * Ultra-lightweight custom view that renders a solid circular dot.
  * Operates with minimal memory footprint and zero CPU cycles when idle.
- * Supports hardware-accelerated dynamic offset for gyroscope-assisted aiming.
+ * The dot remains strictly centered at all times as the reference crosshair reticle.
  */
 class DotView(context: Context) : View(context) {
 
@@ -17,8 +17,6 @@ class DotView(context: Context) : View(context) {
     }
 
     private var dotRadiusPx: Float = 10f
-    private var offsetXPx: Float = 0f
-    private var offsetYPx: Float = 0f
 
     fun update(radiusPx: Float, colorArgb: Int) {
         var needsRedraw = false
@@ -37,25 +35,10 @@ class DotView(context: Context) : View(context) {
         }
     }
 
-    fun setOffset(xPx: Float, yPx: Float) {
-        if (offsetXPx != xPx || offsetYPx != yPx) {
-            offsetXPx = xPx
-            offsetYPx = yPx
-            postInvalidateOnAnimation()
-        }
-    }
-
-    fun resetOffset() {
-        if (offsetXPx != 0f || offsetYPx != 0f) {
-            offsetXPx = 0f
-            offsetYPx = 0f
-            postInvalidateOnAnimation()
-        }
-    }
-
     override fun onDraw(canvas: Canvas) {
-        val cx = (width / 2f) + offsetXPx
-        val cy = (height / 2f) + offsetYPx
+        // Dot is permanently and strictly centered on the screen
+        val cx = width / 2f
+        val cy = height / 2f
         canvas.drawCircle(cx, cy, dotRadiusPx, paint)
     }
 }

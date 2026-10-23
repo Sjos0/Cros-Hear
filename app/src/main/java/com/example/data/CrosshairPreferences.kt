@@ -12,7 +12,8 @@ data class CrosshairState(
     val dotColorArgb: Int = 0xFF00FF66.toInt(),
     val isGyroEnabled: Boolean = false,
     val gyroSensitivity: Float = 1.0f,
-    val gyroSmoothness: Float = 0.5f,
+    val gyroStepPx: Int = 45,
+    val gyroIntervalMs: Long = 75L,
     val gyroInvertX: Boolean = false,
     val gyroInvertY: Boolean = false,
     val neutralPitch: Float = 0f,
@@ -41,7 +42,8 @@ class CrosshairPreferences(context: Context) {
             dotColorArgb = prefs.getInt(KEY_COLOR, DEFAULT_COLOR),
             isGyroEnabled = prefs.getBoolean(KEY_GYRO_ENABLED, false),
             gyroSensitivity = prefs.getFloat(KEY_GYRO_SENSITIVITY, DEFAULT_GYRO_SENSITIVITY),
-            gyroSmoothness = prefs.getFloat(KEY_GYRO_SMOOTHNESS, DEFAULT_GYRO_SMOOTHNESS),
+            gyroStepPx = prefs.getInt(KEY_GYRO_STEP_PX, DEFAULT_GYRO_STEP_PX),
+            gyroIntervalMs = prefs.getLong(KEY_GYRO_INTERVAL_MS, DEFAULT_GYRO_INTERVAL_MS),
             gyroInvertX = prefs.getBoolean(KEY_GYRO_INVERT_X, false),
             gyroInvertY = prefs.getBoolean(KEY_GYRO_INVERT_Y, false),
             neutralPitch = prefs.getFloat(KEY_NEUTRAL_PITCH, 0f),
@@ -76,10 +78,16 @@ class CrosshairPreferences(context: Context) {
         _state.value = _state.value.copy(gyroSensitivity = clamped)
     }
 
-    fun setGyroSmoothness(smoothness: Float) {
-        val clamped = smoothness.coerceIn(0f, 0.9f)
-        prefs.edit().putFloat(KEY_GYRO_SMOOTHNESS, clamped).apply()
-        _state.value = _state.value.copy(gyroSmoothness = clamped)
+    fun setGyroStepPx(stepPx: Int) {
+        val clamped = stepPx.coerceIn(15, 120)
+        prefs.edit().putInt(KEY_GYRO_STEP_PX, clamped).apply()
+        _state.value = _state.value.copy(gyroStepPx = clamped)
+    }
+
+    fun setGyroIntervalMs(intervalMs: Long) {
+        val clamped = intervalMs.coerceIn(40L, 160L)
+        prefs.edit().putLong(KEY_GYRO_INTERVAL_MS, clamped).apply()
+        _state.value = _state.value.copy(gyroIntervalMs = clamped)
     }
 
     fun setGyroInvertX(invert: Boolean) {
@@ -108,7 +116,8 @@ class CrosshairPreferences(context: Context) {
 
         const val KEY_GYRO_ENABLED = "key_gyro_enabled"
         const val KEY_GYRO_SENSITIVITY = "key_gyro_sensitivity"
-        const val KEY_GYRO_SMOOTHNESS = "key_gyro_smoothness"
+        const val KEY_GYRO_STEP_PX = "key_gyro_step_px"
+        const val KEY_GYRO_INTERVAL_MS = "key_gyro_interval_ms"
         const val KEY_GYRO_INVERT_X = "key_gyro_invert_x"
         const val KEY_GYRO_INVERT_Y = "key_gyro_invert_y"
         const val KEY_NEUTRAL_PITCH = "key_neutral_pitch"
@@ -122,6 +131,8 @@ class CrosshairPreferences(context: Context) {
         const val DEFAULT_GYRO_SENSITIVITY = 1.0f
         const val MIN_GYRO_SENSITIVITY = 0.2f
         const val MAX_GYRO_SENSITIVITY = 3.0f
-        const val DEFAULT_GYRO_SMOOTHNESS = 0.5f
+
+        const val DEFAULT_GYRO_STEP_PX = 45
+        const val DEFAULT_GYRO_INTERVAL_MS = 75L
     }
 }

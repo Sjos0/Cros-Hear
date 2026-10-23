@@ -70,8 +70,11 @@ class ExampleUnitTest {
         preferences.setGyroSensitivity(2.5f)
         assertEquals(2.5f, preferences.state.value.gyroSensitivity, 0.001f)
 
-        preferences.setGyroSmoothness(0.7f)
-        assertEquals(0.7f, preferences.state.value.gyroSmoothness, 0.001f)
+        preferences.setGyroStepPx(60)
+        assertEquals(60, preferences.state.value.gyroStepPx)
+
+        preferences.setGyroIntervalMs(90L)
+        assertEquals(90L, preferences.state.value.gyroIntervalMs)
 
         preferences.setGyroInvertX(true)
         assertTrue(preferences.state.value.gyroInvertX)

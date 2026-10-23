@@ -15,6 +15,7 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import android.provider.Settings
 import android.view.Gravity
 import android.view.WindowManager
@@ -34,17 +35,16 @@ class DotOverlayService : Service(), SensorEventListener {
     private var activeSensor: Sensor? = null
     private var isSensorRegistered = false
 
-    // Pre-allocated arrays to avoid GC allocations in the sensor loop
+    // Pre-allocated arrays to eliminate GC overhead in sensor callbacks
     private val rotationMatrix = FloatArray(9)
     private val orientation = FloatArray(3)
-
-    // Filter and smoothing variables
-    private var currentFilteredX = 0f
-    private var currentFilteredY = 0f
 
     // Current tilt angles cached for calibration
     private var lastPitch = 0f
     private var lastRoll = 0f
+
+    // Cooldown management so gyro drag gestures do not compete with user's manual touches
+    private var lastSwipeUptime = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -59,7 +59,6 @@ class DotOverlayService : Service(), SensorEventListener {
         val sm = sensorManager ?: return
         activeSensor = sm.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
             ?: sm.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
-            ?: sm.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
             ?: sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     }
 
@@ -107,8 +106,8 @@ class DotOverlayService : Service(), SensorEventListener {
                 WindowManager.LayoutParams.TYPE_PHONE
             }
 
-            // Using MATCH_PARENT with FLAG_NOT_TOUCHABLE allows zero-latency GPU rendering
-            // of the dynamic gyro offset without calling windowManager.updateViewLayout()
+            // Small centered non-focusable and non-touchable overlay window
+            // Dot stays 100% mathematically centered on the screen at all times
             val windowFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
@@ -122,7 +121,7 @@ class DotOverlayService : Service(), SensorEventListener {
                 windowFlags,
                 PixelFormat.TRANSLUCENT
             ).apply {
-                gravity = Gravity.TOP or Gravity.START
+                gravity = Gravity.CENTER
                 x = 0
                 y = 0
             }
@@ -154,9 +153,6 @@ class DotOverlayService : Service(), SensorEventListener {
             if (isSensorRegistered) {
                 sm?.unregisterListener(this)
                 isSensorRegistered = false
-                currentFilteredX = 0f
-                currentFilteredY = 0f
-                dotView?.resetOffset()
             }
         }
     }
@@ -166,85 +162,99 @@ class DotOverlayService : Service(), SensorEventListener {
         val state = preferences.state.value
         if (!state.isEnabled || !state.isGyroEnabled) return
 
-        val view = dotView ?: return
+        var deltaRoll = 0f
+        var deltaPitch = 0f
 
         when (event.sensor.type) {
             Sensor.TYPE_GAME_ROTATION_VECTOR,
             Sensor.TYPE_ROTATION_VECTOR -> {
                 SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
                 SensorManager.getOrientation(rotationMatrix, orientation)
-
-                val pitch = orientation[1] // Tilt forward/backward
-                val roll = orientation[2]  // Tilt left/right
+                val pitch = orientation[1]
+                val roll = orientation[2]
                 lastPitch = pitch
                 lastRoll = roll
 
-                var deltaRoll = roll - state.neutralRoll
-                var deltaPitch = pitch - state.neutralPitch
-
-                // Deadzone to prevent natural resting hand shake
-                val deadzone = 0.015f
-                if (kotlin.math.abs(deltaRoll) < deadzone) deltaRoll = 0f
-                if (kotlin.math.abs(deltaPitch) < deadzone) deltaPitch = 0f
-
-                val screenDim = minOf(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels).toFloat()
-                val scale = screenDim * 0.85f * state.gyroSensitivity
-
-                val targetX = deltaRoll * scale * (if (state.gyroInvertX) -1f else 1f)
-                val targetY = deltaPitch * scale * (if (state.gyroInvertY) -1f else 1f)
-
-                val maxRange = screenDim * 0.45f
-                val clampedX = targetX.coerceIn(-maxRange, maxRange)
-                val clampedY = targetY.coerceIn(-maxRange, maxRange)
-
-                val alpha = (1f - state.gyroSmoothness).coerceIn(0.08f, 1f)
-                currentFilteredX += (clampedX - currentFilteredX) * alpha
-                currentFilteredY += (clampedY - currentFilteredY) * alpha
-
-                view.setOffset(currentFilteredX, currentFilteredY)
-            }
-            Sensor.TYPE_GYROSCOPE -> {
-                // Gyroscope angular rate (rad/s)
-                val rateX = event.values[0]
-                val rateY = event.values[1]
-
-                val targetX = rateY * 40f * state.gyroSensitivity * (if (state.gyroInvertX) -1f else 1f)
-                val targetY = rateX * 40f * state.gyroSensitivity * (if (state.gyroInvertY) -1f else 1f)
-
-                val alpha = (1f - state.gyroSmoothness).coerceIn(0.1f, 1f)
-                currentFilteredX += (targetX - currentFilteredX) * alpha
-                currentFilteredY += (targetY - currentFilteredY) * alpha
-
-                view.setOffset(currentFilteredX, currentFilteredY)
+                deltaRoll = roll - state.neutralRoll
+                deltaPitch = pitch - state.neutralPitch
             }
             Sensor.TYPE_ACCELEROMETER -> {
                 val accelX = -event.values[0] / 9.81f
                 val accelY = event.values[1] / 9.81f
+                lastPitch = accelY
+                lastRoll = accelX
 
-                val screenDim = minOf(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels).toFloat()
-                val scale = screenDim * 0.5f * state.gyroSensitivity
-
-                val targetX = (accelX - state.neutralRoll) * scale * (if (state.gyroInvertX) -1f else 1f)
-                val targetY = (accelY - state.neutralPitch) * scale * (if (state.gyroInvertY) -1f else 1f)
-
-                val alpha = (1f - state.gyroSmoothness).coerceIn(0.1f, 1f)
-                currentFilteredX += (targetX - currentFilteredX) * alpha
-                currentFilteredY += (targetY - currentFilteredY) * alpha
-
-                view.setOffset(currentFilteredX, currentFilteredY)
+                deltaRoll = accelX - state.neutralRoll
+                deltaPitch = accelY - state.neutralPitch
             }
+        }
+
+        // Apply axis inversion
+        val dirX = if (state.gyroInvertX) -deltaRoll else deltaRoll
+        val dirY = if (state.gyroInvertY) -deltaPitch else deltaPitch
+
+        val magnitude = kotlin.math.hypot(dirX.toDouble(), dirY.toDouble()).toFloat()
+
+        // Deadzone threshold (subtle hand movements do not trigger drag)
+        val deadzone = 0.035f
+        if (magnitude < deadzone) return
+
+        // Throttle gesture dispatches to prevent competing with user's manual screen touches
+        val now = SystemClock.uptimeMillis()
+        if (now - lastSwipeUptime < state.gyroIntervalMs) return
+
+        // Quantize direction into the 8 discrete cardinal and intercardinal sectors
+        // 0: Leste (Direita), 1: Sudeste, 2: Sul (Baixo), 3: Sudoeste,
+        // 4: Oeste (Esquerda), 5: Noroeste, 6: Norte (Cima), 7: Nordeste
+        val angle = kotlin.math.atan2(dirY.toDouble(), dirX.toDouble())
+        val normalizedAngle = if (angle < 0) angle + (2.0 * Math.PI) else angle
+        val sector = (((normalizedAngle + (Math.PI / 8.0)) / (Math.PI / 4.0)).toInt()) % 8
+
+        val (unitX, unitY) = when (sector) {
+            0 -> 1.0f to 0.0f                 // Leste (Direita)
+            1 -> 0.7071f to 0.7071f           // Sudeste (Baixo + Direita)
+            2 -> 0.0f to 1.0f                 // Sul (Baixo)
+            3 -> -0.7071f to 0.7071f          // Sudoeste (Baixo + Esquerda)
+            4 -> -1.0f to 0.0f                // Oeste (Esquerda)
+            5 -> -0.7071f to -0.7071f         // Noroeste (Cima + Esquerda)
+            6 -> 0.0f to -1.0f                // Norte (Cima)
+            7 -> 0.7071f to -0.7071f          // Nordeste (Cima + Direita)
+            else -> 0.0f to 0.0f
+        }
+
+        // Compute step distance proportional to tilt intensity and sensitivity setting
+        val dynamicScale = (magnitude / 0.15f).coerceIn(0.6f, 2.2f)
+        val step = (state.gyroStepPx * state.gyroSensitivity * dynamicScale).toInt()
+
+        val screenW = resources.displayMetrics.widthPixels.toFloat()
+        val screenH = resources.displayMetrics.heightPixels.toFloat()
+
+        // Anchor touch coordinates in typical camera control area (right side of screen)
+        val startX = screenW * 0.70f
+        val startY = screenH * 0.55f
+        val endX = startX + (unitX * step)
+        val endY = startY + (unitY * step)
+
+        // Dispatch simulated touch swipe via AccessibilityService
+        val dispatched = GyroAccessibilityService.dispatchSwipe(
+            startX = startX,
+            startY = startY,
+            endX = endX,
+            endY = endY,
+            durationMs = 30
+        )
+
+        if (dispatched) {
+            lastSwipeUptime = now
         }
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        // No action needed for accuracy adjustments
+        // No-op
     }
 
     private fun calibrateCurrentPosition() {
         preferences.calibrateNeutral(lastPitch, lastRoll)
-        currentFilteredX = 0f
-        currentFilteredY = 0f
-        dotView?.resetOffset()
     }
 
     private fun stopOverlayService() {

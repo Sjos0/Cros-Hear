@@ -10,19 +10,19 @@ O APK também está versionado no repositório em [`apk/DotCrosshair-v1.0.apk`](
 
 ### Integridade do APK v1.0
 
-- **SHA-256:** `0b60047918bf24dd314548ab07bbd12b9a591e5bf6a5f75a74b87909971b48dc`
-- **Tamanho:** aproximadamente 9,7 MiB (10.114.270 bytes)
-- **Formato:** APK Android; a estrutura ZIP foi verificada sem erros.
+- **SHA-256:** `80a7d1f055cf9aa50a76e96dd46bb7d8bb7ba8825f3c460f4421d5f1275fc6c2`
+- **Tamanho:** aproximadamente 10,5 MiB (11.026.432 bytes)
+- **Formato:** APK Android assinado para instalação direta.
 
 ## Funcionalidades
 
-- Mira centralizada na tela em formato de ponto.
-- Controle para ativar e desativar a sobreposição.
-- Tamanho ajustável de 2 a 24 dp.
-- Oito cores predefinidas, incluindo verde neon, ciano, vermelho, amarelo, magenta, branco, laranja e preto.
-- Preferências de tamanho, cor e estado salvas localmente.
-- Serviço em primeiro plano com notificação para manter a mira ativa.
-- A sobreposição não recebe foco nem bloqueia os toques destinados ao aplicativo abaixo dela.
+- **Mira Estritamente Centralizada:** O ponto fica 100% fixo no centro exato da tela em formato circular sólido.
+- **Arraste por Giroscópio (8 Direções):** Simula o clique e arraste de tela nas 8 direções cardeais e colaterais (Norte, Sul, Leste, Oeste, Nordeste, Noroeste, Sudeste, Sudoeste) conforme você inclina o aparelho, auxiliando na mira em jogos de navegador sem que a mira se desloque do centro.
+- **Sem Conflito de Toque:** Intervalos de arraste cronometrados e duração curta para não competir com seus toques manuais na tela.
+- **Proteção Contra Encerramento Repentino:** Suporte para desativação da otimização de bateria do sistema, mantendo o serviço ativo continuamente.
+- **Controles Essenciais:** Ajuste de sensibilidade, distância do arraste (passo em pixels), tempo de intervalo entre gestos, inversão de eixos X e Y e calibração de centro.
+- **Cores e Tamanhos:** Oito cores predefinidas de alto contraste e ajuste de tamanho de 2 a 24 dp.
+- **Interface Responsiva:** Indicadores visuais claros e status de mira sem quebra indevida de linhas.
 
 ## Compatibilidade
 
