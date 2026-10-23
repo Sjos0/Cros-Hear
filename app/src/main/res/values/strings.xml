@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">Dot Crosshair</string>
     <string name="status_active">Mira Ativa</string>
-    <string name="status_inactive">Mira Desativada</string>
+    <string name="status_inactive">Desativada</string>
     <string name="enable_crosshair">Ativar Mira</string>
     <string name="disable_crosshair">Desativar Mira</string>
     <string name="dot_size">Tamanho do Ponto</string>
@@ -16,4 +16,23 @@
     <string name="notification_action_stop">Desativar</string>
     <string name="preview_title">Visualização em Tempo Real</string>
     <string name="preview_tip">O ponto permanece exatamente no centro matemático da tela, não bloqueia toques e não consome recursos extras.</string>
+
+    <!-- Gyroscope Strings -->
+    <string name="gyro_section_title">Assistência por Giroscópio</string>
+    <string name="gyro_section_subtitle">Desloca o ponto ao inclinar o celular para auxiliar na mira em jogos de navegador e FPS</string>
+    <string name="gyro_enable_title">Giroscópio Dinâmico</string>
+    <string name="gyro_enable_desc">Mira reage aos movimentos físicos de inclinação</string>
+    <string name="gyro_sensitivity">Sensibilidade</string>
+    <string name="gyro_smoothness">Suavização / Resposta</string>
+    <string name="gyro_invert_x">Inverter Horizontal (X)</string>
+    <string name="gyro_invert_y">Inverter Vertical (Y)</string>
+    <string name="gyro_calibrate_btn">Calibrar Posição Neutra (Zero)</string>
+    <string name="gyro_calibrated_msg">Posição calibrada com sucesso!</string>
+
+    <!-- Battery & Background Protection -->
+    <string name="battery_section_title">Execução em Segundo Plano</string>
+    <string name="battery_status_protected">Protegido contra fechamento repentino</string>
+    <string name="battery_status_unprotected">Otimização de bateria ativa (pode fechar sozinho)</string>
+    <string name="battery_desc">Desative a otimização de bateria para garantir que o Android nunca encerre o aplicativo ou a mira durante suas partidas.</string>
+    <string name="battery_btn_disable">Desativar Otimização de Bateria</string>
 </resources>

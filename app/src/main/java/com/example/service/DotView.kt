@@ -8,6 +8,7 @@ import android.view.View
 /**
  * Ultra-lightweight custom view that renders a solid circular dot.
  * Operates with minimal memory footprint and zero CPU cycles when idle.
+ * Supports hardware-accelerated dynamic offset for gyroscope-assisted aiming.
  */
 class DotView(context: Context) : View(context) {
 
@@ -16,36 +17,45 @@ class DotView(context: Context) : View(context) {
     }
 
     private var dotRadiusPx: Float = 10f
+    private var offsetXPx: Float = 0f
+    private var offsetYPx: Float = 0f
 
     fun update(radiusPx: Float, colorArgb: Int) {
-        var needsRelayout = false
         var needsRedraw = false
 
         if (dotRadiusPx != radiusPx) {
             dotRadiusPx = radiusPx
-            needsRelayout = true
+            needsRedraw = true
         }
         if (paint.color != colorArgb) {
             paint.color = colorArgb
             needsRedraw = true
         }
 
-        if (needsRelayout) {
-            requestLayout()
-        }
-        if (needsRelayout || needsRedraw) {
+        if (needsRedraw) {
             invalidate()
         }
     }
 
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        val diameter = (dotRadiusPx * 2f).toInt().coerceAtLeast(1)
-        setMeasuredDimension(diameter, diameter)
+    fun setOffset(xPx: Float, yPx: Float) {
+        if (offsetXPx != xPx || offsetYPx != yPx) {
+            offsetXPx = xPx
+            offsetYPx = yPx
+            postInvalidateOnAnimation()
+        }
+    }
+
+    fun resetOffset() {
+        if (offsetXPx != 0f || offsetYPx != 0f) {
+            offsetXPx = 0f
+            offsetYPx = 0f
+            postInvalidateOnAnimation()
+        }
     }
 
     override fun onDraw(canvas: Canvas) {
-        val cx = width / 2f
-        val cy = height / 2f
+        val cx = (width / 2f) + offsetXPx
+        val cy = (height / 2f) + offsetYPx
         canvas.drawCircle(cx, cy, dotRadiusPx, paint)
     }
 }

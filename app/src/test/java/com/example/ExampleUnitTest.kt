@@ -28,6 +28,8 @@ class ExampleUnitTest {
         assertFalse(state.isEnabled)
         assertEquals(CrosshairPreferences.DEFAULT_SIZE_DP, state.dotSizeDp)
         assertEquals(CrosshairPreferences.DEFAULT_COLOR, state.dotColorArgb)
+        assertFalse(state.isGyroEnabled)
+        assertEquals(CrosshairPreferences.DEFAULT_GYRO_SENSITIVITY, state.gyroSensitivity, 0.001f)
     }
 
     @Test
@@ -58,5 +60,27 @@ class ExampleUnitTest {
         val testColor = 0xFFFF1744.toInt()
         preferences.setColor(testColor)
         assertEquals(testColor, preferences.state.value.dotColorArgb)
+    }
+
+    @Test
+    fun testGyroSettings() {
+        preferences.setGyroEnabled(true)
+        assertTrue(preferences.state.value.isGyroEnabled)
+
+        preferences.setGyroSensitivity(2.5f)
+        assertEquals(2.5f, preferences.state.value.gyroSensitivity, 0.001f)
+
+        preferences.setGyroSmoothness(0.7f)
+        assertEquals(0.7f, preferences.state.value.gyroSmoothness, 0.001f)
+
+        preferences.setGyroInvertX(true)
+        assertTrue(preferences.state.value.gyroInvertX)
+
+        preferences.setGyroInvertY(true)
+        assertTrue(preferences.state.value.gyroInvertY)
+
+        preferences.calibrateNeutral(0.25f, -0.15f)
+        assertEquals(0.25f, preferences.state.value.neutralPitch, 0.001f)
+        assertEquals(-0.15f, preferences.state.value.neutralRoll, 0.001f)
     }
 }

@@ -9,6 +9,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
@@ -19,24 +23,56 @@ import com.example.MainActivity
 import com.example.R
 import com.example.data.CrosshairPreferences
 
-class DotOverlayService : Service() {
+class DotOverlayService : Service(), SensorEventListener {
 
     private var windowManager: WindowManager? = null
     private var dotView: DotView? = null
     private var layoutParams: WindowManager.LayoutParams? = null
     private lateinit var preferences: CrosshairPreferences
 
+    private var sensorManager: SensorManager? = null
+    private var activeSensor: Sensor? = null
+    private var isSensorRegistered = false
+
+    // Pre-allocated arrays to avoid GC allocations in the sensor loop
+    private val rotationMatrix = FloatArray(9)
+    private val orientation = FloatArray(3)
+
+    // Filter and smoothing variables
+    private var currentFilteredX = 0f
+    private var currentFilteredY = 0f
+
+    // Current tilt angles cached for calibration
+    private var lastPitch = 0f
+    private var lastRoll = 0f
+
     override fun onCreate() {
         super.onCreate()
         preferences = CrosshairPreferences(this)
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+        setupSensors()
         createNotificationChannel()
     }
 
+    private fun setupSensors() {
+        val sm = sensorManager ?: return
+        activeSensor = sm.getDefaultSensor(Sensor.TYPE_GAME_ROTATION_VECTOR)
+            ?: sm.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+            ?: sm.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+            ?: sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
-            stopOverlayService()
-            return START_NOT_STICKY
+        when (intent?.action) {
+            ACTION_STOP -> {
+                stopOverlayService()
+                return START_NOT_STICKY
+            }
+            ACTION_CALIBRATE -> {
+                calibrateCurrentPosition()
+                return START_STICKY
+            }
         }
 
         if (!Settings.canDrawOverlays(this)) {
@@ -47,6 +83,7 @@ class DotOverlayService : Service() {
 
         startForegroundServiceNotification()
         showOrUpdateOverlay()
+        updateSensorRegistration()
 
         return START_STICKY
     }
@@ -70,20 +107,22 @@ class DotOverlayService : Service() {
                 WindowManager.LayoutParams.TYPE_PHONE
             }
 
-            val flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            // Using MATCH_PARENT with FLAG_NOT_TOUCHABLE allows zero-latency GPU rendering
+            // of the dynamic gyro offset without calling windowManager.updateViewLayout()
+            val windowFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                 WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
 
             val params = WindowManager.LayoutParams(
-                diameterPx,
-                diameterPx,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
                 windowType,
-                flags,
+                windowFlags,
                 PixelFormat.TRANSLUCENT
             ).apply {
-                gravity = Gravity.CENTER
+                gravity = Gravity.TOP or Gravity.START
                 x = 0
                 y = 0
             }
@@ -98,21 +137,122 @@ class DotOverlayService : Service() {
             }
         } else {
             dotView?.update(radiusPx, state.dotColorArgb)
-            val currentParams = layoutParams
-            if (currentParams != null && (currentParams.width != diameterPx || currentParams.height != diameterPx)) {
-                currentParams.width = diameterPx
-                currentParams.height = diameterPx
-                try {
-                    wm.updateViewLayout(dotView, currentParams)
-                } catch (_: Exception) {
-                    // Ignored if view is in transition
-                }
+        }
+    }
+
+    private fun updateSensorRegistration() {
+        val state = preferences.state.value
+        val sm = sensorManager
+        val sensor = activeSensor
+
+        if (state.isEnabled && state.isGyroEnabled && sm != null && sensor != null) {
+            if (!isSensorRegistered) {
+                sm.registerListener(this, sensor, SensorManager.SENSOR_DELAY_GAME)
+                isSensorRegistered = true
+            }
+        } else {
+            if (isSensorRegistered) {
+                sm?.unregisterListener(this)
+                isSensorRegistered = false
+                currentFilteredX = 0f
+                currentFilteredY = 0f
+                dotView?.resetOffset()
             }
         }
     }
 
+    override fun onSensorChanged(event: SensorEvent?) {
+        if (event == null) return
+        val state = preferences.state.value
+        if (!state.isEnabled || !state.isGyroEnabled) return
+
+        val view = dotView ?: return
+
+        when (event.sensor.type) {
+            Sensor.TYPE_GAME_ROTATION_VECTOR,
+            Sensor.TYPE_ROTATION_VECTOR -> {
+                SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
+                SensorManager.getOrientation(rotationMatrix, orientation)
+
+                val pitch = orientation[1] // Tilt forward/backward
+                val roll = orientation[2]  // Tilt left/right
+                lastPitch = pitch
+                lastRoll = roll
+
+                var deltaRoll = roll - state.neutralRoll
+                var deltaPitch = pitch - state.neutralPitch
+
+                // Deadzone to prevent natural resting hand shake
+                val deadzone = 0.015f
+                if (kotlin.math.abs(deltaRoll) < deadzone) deltaRoll = 0f
+                if (kotlin.math.abs(deltaPitch) < deadzone) deltaPitch = 0f
+
+                val screenDim = minOf(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels).toFloat()
+                val scale = screenDim * 0.85f * state.gyroSensitivity
+
+                val targetX = deltaRoll * scale * (if (state.gyroInvertX) -1f else 1f)
+                val targetY = deltaPitch * scale * (if (state.gyroInvertY) -1f else 1f)
+
+                val maxRange = screenDim * 0.45f
+                val clampedX = targetX.coerceIn(-maxRange, maxRange)
+                val clampedY = targetY.coerceIn(-maxRange, maxRange)
+
+                val alpha = (1f - state.gyroSmoothness).coerceIn(0.08f, 1f)
+                currentFilteredX += (clampedX - currentFilteredX) * alpha
+                currentFilteredY += (clampedY - currentFilteredY) * alpha
+
+                view.setOffset(currentFilteredX, currentFilteredY)
+            }
+            Sensor.TYPE_GYROSCOPE -> {
+                // Gyroscope angular rate (rad/s)
+                val rateX = event.values[0]
+                val rateY = event.values[1]
+
+                val targetX = rateY * 40f * state.gyroSensitivity * (if (state.gyroInvertX) -1f else 1f)
+                val targetY = rateX * 40f * state.gyroSensitivity * (if (state.gyroInvertY) -1f else 1f)
+
+                val alpha = (1f - state.gyroSmoothness).coerceIn(0.1f, 1f)
+                currentFilteredX += (targetX - currentFilteredX) * alpha
+                currentFilteredY += (targetY - currentFilteredY) * alpha
+
+                view.setOffset(currentFilteredX, currentFilteredY)
+            }
+            Sensor.TYPE_ACCELEROMETER -> {
+                val accelX = -event.values[0] / 9.81f
+                val accelY = event.values[1] / 9.81f
+
+                val screenDim = minOf(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels).toFloat()
+                val scale = screenDim * 0.5f * state.gyroSensitivity
+
+                val targetX = (accelX - state.neutralRoll) * scale * (if (state.gyroInvertX) -1f else 1f)
+                val targetY = (accelY - state.neutralPitch) * scale * (if (state.gyroInvertY) -1f else 1f)
+
+                val alpha = (1f - state.gyroSmoothness).coerceIn(0.1f, 1f)
+                currentFilteredX += (targetX - currentFilteredX) * alpha
+                currentFilteredY += (targetY - currentFilteredY) * alpha
+
+                view.setOffset(currentFilteredX, currentFilteredY)
+            }
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        // No action needed for accuracy adjustments
+    }
+
+    private fun calibrateCurrentPosition() {
+        preferences.calibrateNeutral(lastPitch, lastRoll)
+        currentFilteredX = 0f
+        currentFilteredY = 0f
+        dotView?.resetOffset()
+    }
+
     private fun stopOverlayService() {
         preferences.setEnabled(false)
+        if (isSensorRegistered) {
+            sensorManager?.unregisterListener(this)
+            isSensorRegistered = false
+        }
         removeOverlayView()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -201,6 +341,10 @@ class DotOverlayService : Service() {
     }
 
     override fun onDestroy() {
+        if (isSensorRegistered) {
+            sensorManager?.unregisterListener(this)
+            isSensorRegistered = false
+        }
         removeOverlayView()
         super.onDestroy()
     }
@@ -214,6 +358,7 @@ class DotOverlayService : Service() {
         const val ACTION_START = "com.example.action.START"
         const val ACTION_STOP = "com.example.action.STOP"
         const val ACTION_UPDATE = "com.example.action.UPDATE"
+        const val ACTION_CALIBRATE = "com.example.action.CALIBRATE"
 
         fun start(context: Context) {
             val intent = Intent(context, DotOverlayService::class.java).apply {
@@ -236,6 +381,17 @@ class DotOverlayService : Service() {
         fun update(context: Context) {
             val intent = Intent(context, DotOverlayService::class.java).apply {
                 action = ACTION_UPDATE
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+
+        fun calibrate(context: Context) {
+            val intent = Intent(context, DotOverlayService::class.java).apply {
+                action = ACTION_CALIBRATE
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)

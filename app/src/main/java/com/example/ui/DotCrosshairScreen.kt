@@ -14,15 +14,17 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -32,6 +34,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
@@ -48,6 +51,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
@@ -97,10 +102,20 @@ val SizePresets = listOf(
 fun DotCrosshairScreen(
     state: CrosshairState,
     hasOverlayPermission: Boolean,
+    isBatteryOptimizationIgnored: Boolean,
+    previewOffsetX: Float = 0f,
+    previewOffsetY: Float = 0f,
     onToggleEnabled: (Boolean) -> Unit,
     onSizeChange: (Int) -> Unit,
     onColorChange: (Int) -> Unit,
+    onToggleGyro: (Boolean) -> Unit,
+    onGyroSensitivityChange: (Float) -> Unit,
+    onGyroSmoothnessChange: (Float) -> Unit,
+    onToggleInvertX: (Boolean) -> Unit,
+    onToggleInvertY: (Boolean) -> Unit,
+    onCalibrateGyro: () -> Unit,
     onRequestPermission: () -> Unit,
+    onRequestDisableBatteryOptimization: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
@@ -113,13 +128,17 @@ fun DotCrosshairScreen(
             .padding(horizontal = 20.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Top Header
+        // Top Header with fully responsive, non-wrapping status pill
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 12.dp)
+            ) {
                 Text(
                     text = stringResource(R.string.app_name),
                     style = MaterialTheme.typography.headlineMedium,
@@ -128,21 +147,32 @@ fun DotCrosshairScreen(
                 Text(
                     text = "Mira centralizada ultra leve para jogos",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
-            // Status Badge
+            // Status Badge - Fixed single-line layout with softWrap = false to prevent line wraps
             Surface(
                 shape = RoundedCornerShape(20.dp),
                 color = if (state.isEnabled) NeonGreen.copy(alpha = 0.15f) else DarkSurfaceVariant,
                 border = androidx.compose.foundation.BorderStroke(
                     1.dp,
                     if (state.isEnabled) NeonGreen.copy(alpha = 0.5f) else DarkBorder
-                )
+                ),
+                modifier = Modifier
+                    .clickable {
+                        if (!hasOverlayPermission && !state.isEnabled) {
+                            onRequestPermission()
+                        } else {
+                            onToggleEnabled(!state.isEnabled)
+                        }
+                    }
+                    .testTag("status_badge_button")
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
@@ -155,14 +185,16 @@ fun DotCrosshairScreen(
                     Text(
                         text = if (state.isEnabled) stringResource(R.string.status_active) else stringResource(R.string.status_inactive),
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = if (state.isEnabled) NeonGreen else TextSecondary
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (state.isEnabled) NeonGreen else TextSecondary,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
             }
         }
 
-        // Permission Notice
+        // Overlay Permission Notice
         AnimatedVisibility(visible = !hasOverlayPermission) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant),
@@ -242,7 +274,7 @@ fun DotCrosshairScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                     Text(
                         text = if (state.isEnabled) stringResource(R.string.disable_crosshair) else stringResource(R.string.enable_crosshair),
                         style = MaterialTheme.typography.titleMedium,
@@ -275,7 +307,7 @@ fun DotCrosshairScreen(
             }
         }
 
-        // Real-Time Center Preview Box
+        // Real-Time Center Preview Box with live Gyro feedback
         Card(
             colors = CardDefaults.cardColors(containerColor = DarkSurface),
             shape = RoundedCornerShape(16.dp),
@@ -297,18 +329,35 @@ fun DotCrosshairScreen(
                         style = MaterialTheme.typography.titleMedium,
                         color = TextPrimary
                     )
-                    Text(
-                        text = "${state.dotSizeDp} dp",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = NeonCyan
-                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (state.isGyroEnabled) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = NeonCyan.copy(alpha = 0.15f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.4f))
+                            ) {
+                                Text(
+                                    text = "Giroscópio Ativo",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = NeonCyan,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            text = "${state.dotSizeDp} dp",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = NeonCyan
+                        )
+                    }
                 }
 
                 // Visual Target Display
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(130.dp)
+                        .height(140.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(Color(0xFF090D12))
                         .border(1.dp, DarkBorder, RoundedCornerShape(12.dp)),
@@ -317,19 +366,31 @@ fun DotCrosshairScreen(
                     // Subtle concentric guide rings
                     Box(
                         modifier = Modifier
-                            .size(90.dp)
+                            .size(100.dp)
                             .border(1.dp, Color(0xFF161E28), CircleShape)
                     )
                     Box(
                         modifier = Modifier
-                            .size(50.dp)
+                            .size(60.dp)
                             .border(1.dp, Color(0xFF1E2836), CircleShape)
                     )
+                    // Axis cross indicators
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .border(0.5.dp, Color(0xFF263242), CircleShape)
+                    )
 
-                    // Live Dot Render
+                    // Live Dot Render with live preview offset if gyro is active
                     val previewColor = Color(state.dotColorArgb)
                     Box(
                         modifier = Modifier
+                            .offset {
+                                IntOffset(
+                                    x = previewOffsetX.toInt(),
+                                    y = previewOffsetY.toInt()
+                                )
+                            }
                             .size(state.dotSizeDp.dp)
                             .clip(CircleShape)
                             .background(previewColor)
@@ -337,11 +398,299 @@ fun DotCrosshairScreen(
                 }
 
                 Text(
-                    text = stringResource(R.string.preview_tip),
+                    text = if (state.isGyroEnabled) {
+                        "Incline o aparelho para testar a movimentação da mira em tempo real."
+                    } else {
+                        stringResource(R.string.preview_tip)
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextMuted,
                     textAlign = TextAlign.Center
                 )
+            }
+        }
+
+        // Gyroscope Assist Section (NEW)
+        Card(
+            colors = CardDefaults.cardColors(containerColor = DarkSurface),
+            shape = RoundedCornerShape(16.dp),
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp,
+                if (state.isGyroEnabled) NeonCyan.copy(alpha = 0.5f) else DarkBorder
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // Gyro Header and Toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f).padding(end = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(NeonCyan.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = null,
+                                tint = NeonCyan,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Column {
+                            Text(
+                                text = stringResource(R.string.gyro_enable_title),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = stringResource(R.string.gyro_enable_desc),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextSecondary
+                            )
+                        }
+                    }
+
+                    Switch(
+                        checked = state.isGyroEnabled,
+                        onCheckedChange = { onToggleGyro(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = DarkBackground,
+                            checkedTrackColor = NeonCyan,
+                            uncheckedThumbColor = TextMuted,
+                            uncheckedTrackColor = DarkSurfaceVariant
+                        ),
+                        modifier = Modifier.testTag("gyro_toggle_switch")
+                    )
+                }
+
+                AnimatedVisibility(visible = state.isGyroEnabled) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                        modifier = Modifier.padding(top = 6.dp)
+                    ) {
+                        // Sensitivity Slider
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.gyro_sensitivity),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "${"%.1f".format(state.gyroSensitivity)}x",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = NeonCyan
+                                )
+                            }
+                            Slider(
+                                value = state.gyroSensitivity,
+                                onValueChange = onGyroSensitivityChange,
+                                valueRange = CrosshairPreferences.MIN_GYRO_SENSITIVITY..CrosshairPreferences.MAX_GYRO_SENSITIVITY,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = NeonCyan,
+                                    activeTrackColor = NeonCyan,
+                                    inactiveTrackColor = DarkSurfaceVariant
+                                ),
+                                modifier = Modifier.testTag("gyro_sensitivity_slider")
+                            )
+                        }
+
+                        // Smoothness / Response Slider
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.gyro_smoothness),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = TextPrimary
+                                )
+                                val smoothnessLabel = when {
+                                    state.gyroSmoothness >= 0.65f -> "Alta (Muito Suave)"
+                                    state.gyroSmoothness >= 0.35f -> "Equilibrada"
+                                    else -> "Direta (Máx Resposta)"
+                                }
+                                Text(
+                                    text = smoothnessLabel,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = TextSecondary
+                                )
+                            }
+                            Slider(
+                                value = state.gyroSmoothness,
+                                onValueChange = onGyroSmoothnessChange,
+                                valueRange = 0f..0.85f,
+                                colors = SliderDefaults.colors(
+                                    thumbColor = NeonCyan,
+                                    activeTrackColor = NeonCyan,
+                                    inactiveTrackColor = DarkSurfaceVariant
+                                ),
+                                modifier = Modifier.testTag("gyro_smoothness_slider")
+                            )
+                        }
+
+                        // Axis Inversion Controls
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            FilterChip(
+                                selected = state.gyroInvertX,
+                                onClick = { onToggleInvertX(!state.gyroInvertX) },
+                                label = { Text(stringResource(R.string.gyro_invert_x), fontSize = 12.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = DarkSurfaceVariant,
+                                    labelColor = TextSecondary,
+                                    selectedContainerColor = NeonCyan.copy(alpha = 0.2f),
+                                    selectedLabelColor = NeonCyan
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = state.gyroInvertX,
+                                    borderColor = DarkBorder,
+                                    selectedBorderColor = NeonCyan
+                                )
+                            )
+
+                            FilterChip(
+                                selected = state.gyroInvertY,
+                                onClick = { onToggleInvertY(!state.gyroInvertY) },
+                                label = { Text(stringResource(R.string.gyro_invert_y), fontSize = 12.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = DarkSurfaceVariant,
+                                    labelColor = TextSecondary,
+                                    selectedContainerColor = NeonCyan.copy(alpha = 0.2f),
+                                    selectedLabelColor = NeonCyan
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = state.gyroInvertY,
+                                    borderColor = DarkBorder,
+                                    selectedBorderColor = NeonCyan
+                                )
+                            )
+                        }
+
+                        // Calibration Button
+                        OutlinedButton(
+                            onClick = onCalibrateGyro,
+                            modifier = Modifier.fillMaxWidth().testTag("calibrate_gyro_button"),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = NeonCyan
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.6f))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp).padding(end = 6.dp)
+                            )
+                            Text(
+                                text = stringResource(R.string.gyro_calibrate_btn),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Battery Optimization & Background Execution Protection Card (NEW)
+        Card(
+            colors = CardDefaults.cardColors(containerColor = DarkSurface),
+            shape = RoundedCornerShape(16.dp),
+            border = androidx.compose.foundation.BorderStroke(
+                1.dp,
+                if (isBatteryOptimizationIgnored) NeonGreen.copy(alpha = 0.4f) else VividOrange.copy(alpha = 0.4f)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isBatteryOptimizationIgnored) NeonGreen.copy(alpha = 0.15f)
+                                else VividOrange.copy(alpha = 0.15f)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isBatteryOptimizationIgnored) Icons.Default.Check else Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = if (isBatteryOptimizationIgnored) NeonGreen else VividOrange,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = stringResource(R.string.battery_section_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = if (isBatteryOptimizationIgnored) {
+                                stringResource(R.string.battery_status_protected)
+                            } else {
+                                stringResource(R.string.battery_status_unprotected)
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = if (isBatteryOptimizationIgnored) NeonGreen else VividOrange
+                        )
+                    }
+                }
+
+                Text(
+                    text = stringResource(R.string.battery_desc),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary
+                )
+
+                if (!isBatteryOptimizationIgnored) {
+                    Button(
+                        onClick = onRequestDisableBatteryOptimization,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = VividOrange,
+                            contentColor = DarkBackground
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("disable_battery_optimization_btn")
+                    ) {
+                        Text(
+                            text = stringResource(R.string.battery_btn_disable),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
             }
         }
 
@@ -500,7 +849,7 @@ fun DotCrosshairScreen(
                     color = TextPrimary
                 )
                 Text(
-                    text = "• 0% consumo de CPU quando estático\n• Aceleração direta por hardware (GPU)\n• Toques totalmente livres sem interferência\n• Totalmente livre de anúncios e telemetria",
+                    text = "• Giroscópio com sensor delay otimizado e zero alocação de GC\n• 0% consumo de CPU em repouso\n• Aceleração direta por hardware (GPU)\n• Toques totalmente livres sem interferência\n• Totalmente livre de anúncios e telemetria",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary,
                     lineHeight = 18.sp
